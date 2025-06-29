@@ -1,0 +1,57 @@
+[package]
+name = "memory-gateway"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Async runtime
+tokio.workspace = true
+
+# gRPC
+tonic.workspace = true
+prost.workspace = true
+
+# MongoDB
+mongodb.workspace = true
+bson.workspace = true
+
+# Cryptography
+ring.workspace = true
+rustls.workspace = true
+jsonwebtoken.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Metrics
+prometheus.workspace = true
+
+# Utils
+uuid.workspace = true
+chrono.workspace = true
+bytes.workspace = true
+
+# Additional dependencies
+futures = "0.3"
+tower = "0.4"
+hyper = "1.4"
+axum = "0.7"
+
+[build-dependencies]
+tonic-build.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
+proptest.workspace = true
+tokio-test = "0.4"

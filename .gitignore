@@ -1,0 +1,68 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+github-bridge
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker-compose.override.yml
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# MongoDB
+data/
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.csr
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Build artifacts
+dist/
+build/
+
+# Test coverage
+coverage/
+*.coverage
+*.lcov
+
+# OS files
+Thumbs.db

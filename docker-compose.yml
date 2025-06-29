@@ -1,0 +1,165 @@
+version: '3.9'
+
+services:
+  # MongoDB for Virtual DOM storage
+  mongodb:
+    image: mongo:7.0
+    container_name: virtualdom-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: virtual_dom
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    ports:
+      - "27017:27017"
+    networks:
+      - virtualdom
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Virtual DOM Gateway Service
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+      args:
+        VERSION: ${VERSION:-latest}
+    container_name: virtualdom-gateway
+    restart: unless-stopped
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 50051
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/virtual_dom?authSource=admin
+      MONGODB_DATABASE: virtual_dom
+      JWT_SECRET: ${JWT_SECRET:-change-in-production}
+      TLS_CERT_PATH: ${TLS_CERT_PATH:-}
+      TLS_KEY_PATH: ${TLS_KEY_PATH:-}
+      ENABLE_METRICS: "true"
+      METRICS_PORT: 9090
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "50051:50051"  # gRPC port
+      - "9090:9090"    # Metrics port
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - virtualdom
+    volumes:
+      - gateway_logs:/var/log/virtualdom
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
+  # GitHub Bridge Service
+  github-bridge:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.github-bridge
+      args:
+        VERSION: ${VERSION:-latest}
+        COMMIT: ${COMMIT:-none}
+    container_name: virtualdom-github-bridge
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/virtual_dom?authSource=admin
+      MONGODB_DATABASE: virtual_dom
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_ORG: ${GITHUB_ORG:-tekfly}
+      GITHUB_REPO: ${GITHUB_REPO}
+      GITHUB_BRANCH: ${GITHUB_BRANCH:-main}
+      GIT_USER_NAME: ${GIT_USER_NAME:-Virtual DOM Bot}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-bot@tekfly.io}
+      POLL_INTERVAL: ${POLL_INTERVAL:-5}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
+      WORKER_COUNT: ${WORKER_COUNT:-3}
+      METRICS_PORT: 9091
+      ENABLE_SIGNING: ${ENABLE_SIGNING:-false}
+      DRY_RUN: ${DRY_RUN:-false}
+      ENABLE_WEBHOOKS: ${ENABLE_WEBHOOKS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "9091:9091"  # Metrics port
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - virtualdom
+    volumes:
+      - github_temp:/tmp/github-bridge
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: virtualdom-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9092:9090"
+    networks:
+      - virtualdom
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: virtualdom-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - virtualdom
+    depends_on:
+      - prometheus
+
+networks:
+  virtualdom:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  mongodb_data:
+    driver: local
+  gateway_logs:
+    driver: local
+  github_temp:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

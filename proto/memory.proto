@@ -1,0 +1,180 @@
+syntax = "proto3";
+
+package tekfly.virtualdom.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// Main service for Virtual DOM operations
+service MemoryGateway {
+  // Write a diff to the Virtual DOM
+  rpc WriteDiff(WriteDiffRequest) returns (WriteDiffResponse);
+  
+  // Read a snapshot of the Virtual DOM
+  rpc ReadSnapshot(ReadSnapshotRequest) returns (ReadSnapshotResponse);
+  
+  // Subscribe to real-time changes
+  rpc SubscribeChanges(SubscribeChangesRequest) returns (stream ChangeEvent);
+  
+  // Resolve conflicts between versions
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+  
+  // Get file history
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+}
+
+// Request to write a diff
+message WriteDiffRequest {
+  string repo = 1;
+  string branch = 2;
+  string path = 3;
+  bytes diff = 4;  // Raw BSON diff
+  string author = 5;
+  string message = 6;
+  int64 parent_version = 7;  // For optimistic locking
+  map<string, string> metadata = 8;
+}
+
+// Response for write diff
+message WriteDiffResponse {
+  string id = 1;
+  int64 version = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  ConflictInfo conflict = 4;  // If conflict occurred
+}
+
+// Conflict information
+message ConflictInfo {
+  bool has_conflict = 1;
+  int64 current_version = 2;
+  string current_author = 3;
+  bytes current_content = 4;
+}
+
+// Request to read snapshot
+message ReadSnapshotRequest {
+  string repo = 1;
+  string branch = 2;
+  string path = 3;
+  int64 version = 4;  // Optional, latest if not specified
+}
+
+// Response with snapshot
+message ReadSnapshotResponse {
+  string id = 1;
+  bytes content = 2;  // Raw BSON content
+  int64 version = 3;
+  string author = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  map<string, string> metadata = 6;
+}
+
+// Subscribe to changes request
+message SubscribeChangesRequest {
+  string repo = 1;
+  string branch = 2;
+  repeated string paths = 3;  // Empty for all paths
+  int64 from_version = 4;  // Start from this version
+}
+
+// Real-time change event
+message ChangeEvent {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_CREATE = 1;
+    EVENT_TYPE_UPDATE = 2;
+    EVENT_TYPE_DELETE = 3;
+    EVENT_TYPE_RENAME = 4;
+  }
+  
+  EventType type = 1;
+  string repo = 2;
+  string branch = 3;
+  string path = 4;
+  bytes diff = 5;
+  string author = 6;
+  int64 version = 7;
+  google.protobuf.Timestamp timestamp = 8;
+  map<string, string> metadata = 9;
+}
+
+// Conflict resolution request
+message ResolveConflictRequest {
+  string repo = 1;
+  string branch = 2;
+  string path = 3;
+  bytes local_content = 4;
+  bytes remote_content = 5;
+  bytes base_content = 6;
+  string strategy = 7;  // "manual", "ours", "theirs", "ai"
+}
+
+// Conflict resolution response
+message ResolveConflictResponse {
+  bytes merged_content = 1;
+  repeated ConflictMarker markers = 2;
+  bool ai_resolved = 3;
+  string resolution_notes = 4;
+}
+
+// Conflict marker in merged content
+message ConflictMarker {
+  int32 start_line = 1;
+  int32 end_line = 2;
+  string description = 3;
+}
+
+// Get history request
+message GetHistoryRequest {
+  string repo = 1;
+  string branch = 2;
+  string path = 3;
+  int32 limit = 4;
+  int64 before_version = 5;
+}
+
+// History response
+message GetHistoryResponse {
+  repeated HistoryEntry entries = 1;
+  bool has_more = 2;
+}
+
+// Single history entry
+message HistoryEntry {
+  string id = 1;
+  int64 version = 2;
+  string author = 3;
+  string message = 4;
+  google.protobuf.Timestamp timestamp = 5;
+  int32 additions = 6;
+  int32 deletions = 7;
+}
+
+// Push intent for GitHub synchronization
+message PushIntent {
+  string repo = 1;
+  string branch = 2;
+  repeated FileChange changes = 3;
+  string commit_message = 4;
+  string author_name = 5;
+  string author_email = 6;
+  bool create_pr = 7;
+  string pr_title = 8;
+  string pr_body = 9;
+}
+
+// File change in push intent
+message FileChange {
+  enum ChangeType {
+    CHANGE_TYPE_UNSPECIFIED = 0;
+    CHANGE_TYPE_ADD = 1;
+    CHANGE_TYPE_MODIFY = 2;
+    CHANGE_TYPE_DELETE = 3;
+    CHANGE_TYPE_RENAME = 4;
+  }
+  
+  ChangeType type = 1;
+  string path = 2;
+  bytes content = 3;
+  string old_path = 4;  // For renames
+}
