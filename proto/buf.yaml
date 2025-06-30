@@ -1,0 +1,17 @@
+version: v1
+name: buf.build/tekfly/virtualdom
+lint:
+  use:
+    - DEFAULT
+  except:
+    - FIELD_LOWER_SNAKE_CASE  # Allow camelCase for compatibility
+  rpc_allow_same_request_response: false
+  rpc_allow_google_protobuf_empty_requests: true
+  rpc_allow_google_protobuf_empty_responses: true
+  enum_zero_value_suffix: _UNSPECIFIED
+  service_suffix: Service
+breaking:
+  use:
+    - FILE
+  except:
+    - EXTENSION_NO_DELETE  # Allow extension deletion during alpha

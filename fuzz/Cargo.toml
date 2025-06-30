@@ -1,0 +1,31 @@
+[package]
+name = "virtual-dom-gateway-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+virtual-dom-gateway = { path = "../src/gateway" }
+bytes = "1.5"
+prost = "0.12"
+
+[workspace]
+
+# Prevent this from interfering with workspaces
+[workspace.dependencies]
+
+[[bin]]
+name = "bson_parser"
+path = "../tests/fuzz/fuzz_targets/bson_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "grpc_service"
+path = "../tests/fuzz/fuzz_targets/grpc_service.rs"
+test = false
+doc = false
