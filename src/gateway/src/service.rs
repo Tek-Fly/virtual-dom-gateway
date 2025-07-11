@@ -7,9 +7,16 @@ use crate::metrics;
 use crate::config::Config;
 use mongodb::Client;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, instrument};
+
+// Helper function to convert chrono DateTime to prost Timestamp
+fn to_timestamp(dt: chrono::DateTime<chrono::Utc>) -> prost_types::Timestamp {
+    prost_types::Timestamp {
+        seconds: dt.timestamp(),
+        nanos: dt.timestamp_subsec_nanos() as i32,
+    }
+}
 
 pub struct MemoryGatewayService {
     db: Arc<Database>,
@@ -84,7 +91,7 @@ impl MemoryGateway for MemoryGatewayService {
                 Ok(Response::new(WriteDiffResponse {
                     id,
                     version,
-                    timestamp: Some(prost_types::Timestamp::from(chrono::Utc::now())),
+                    timestamp: Some(to_timestamp(chrono::Utc::now())),
                     conflict: None,
                 }))
             }
@@ -101,7 +108,7 @@ impl MemoryGateway for MemoryGatewayService {
                 Ok(Response::new(WriteDiffResponse {
                     id: String::new(),
                     version: 0,
-                    timestamp: Some(prost_types::Timestamp::from(chrono::Utc::now())),
+                    timestamp: Some(to_timestamp(chrono::Utc::now())),
                     conflict: Some(ConflictInfo {
                         has_conflict: true,
                         current_version: current,
@@ -138,11 +145,11 @@ impl MemoryGateway for MemoryGatewayService {
             Ok(doc) => {
                 metrics::READ_SUCCESS.inc();
                 Ok(Response::new(ReadSnapshotResponse {
-                    id: doc.id.unwrap_or_default(),
+                    id: doc.id.unwrap_or_default().to_string(),
                     content: doc.blob,
                     version: doc.version.value(),
                     author: doc.author,
-                    timestamp: Some(prost_types::Timestamp::from(doc.timestamp)),
+                    timestamp: Some(to_timestamp(doc.timestamp)),
                     metadata: doc.metadata,
                 }))
             }
@@ -255,7 +262,7 @@ impl MemoryGateway for MemoryGatewayService {
                         version: e.version,
                         author: e.author,
                         message: e.message,
-                        timestamp: Some(prost_types::Timestamp::from(e.timestamp)),
+                        timestamp: Some(to_timestamp(e.timestamp)),
                         additions: e.additions,
                         deletions: e.deletions,
                     })

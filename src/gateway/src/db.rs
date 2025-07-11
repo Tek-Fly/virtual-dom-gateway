@@ -1,17 +1,19 @@
 use crate::error::ServiceError;
 use crate::grpc::ChangeEvent;
-use bson::{doc, Document as BsonDocument};
+use bson::doc;
 use chrono::{DateTime, Utc};
 use mongodb::{
     change_stream::event::ChangeStreamEvent,
-    options::{ChangeStreamOptions, ClientOptions, FindOneOptions, UpdateOptions},
+    options::{ChangeStreamOptions, ClientOptions, UpdateOptions},
     Client, Collection,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
+use futures::StreamExt;
+use prost_types;
 
 /// Vector clock for optimistic locking
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -104,7 +106,7 @@ impl Database {
             "path": &doc.path,
         };
 
-        let existing = collection.find_one(filter.clone()).await?;
+        let existing = collection.find_one(filter.clone(), None).await?;
 
         match existing {
             Some(existing_doc) if existing_doc.version.value() != parent_version => {
@@ -124,8 +126,7 @@ impl Database {
                 };
 
                 collection
-                    .update_one(filter, update)
-                    .with_options(UpdateOptions::builder().upsert(true).build())
+                    .update_one(filter, update, UpdateOptions::builder().upsert(true).build())
                     .await?;
 
                 // Record in history
@@ -138,7 +139,7 @@ impl Database {
             }
             None => {
                 // New document
-                let result = collection.insert_one(&doc).await?;
+                let result = collection.insert_one(&doc, None).await?;
                 let id = result
                     .inserted_id
                     .as_object_id()
@@ -169,13 +170,13 @@ impl Database {
             "path": path,
         };
 
-        if let Some(v) = version {
+        if let Some(_v) = version {
             // TODO: Implement version-specific retrieval from history
             // For now, just return latest if version matches
         }
 
         collection
-            .find_one(filter)
+            .find_one(filter, None)
             .await?
             .ok_or(ServiceError::NotFound)
     }
@@ -212,13 +213,11 @@ impl Database {
         pipeline.push(doc! { "$match": match_doc });
 
         let options = ChangeStreamOptions::builder()
-            .full_document(mongodb::options::FullDocumentType::UpdateLookup)
+            .full_document(Some(mongodb::options::FullDocumentType::UpdateLookup))
             .build();
 
         let mut change_stream = collection
-            .watch()
-            .with_options(options)
-            .pipeline(pipeline)
+            .watch(pipeline, options)
             .await?;
 
         while let Some(event) = change_stream.next().await {
@@ -240,7 +239,10 @@ impl Database {
                             diff: doc.blob,
                             author: doc.author,
                             version: doc.version.value(),
-                            timestamp: Some(prost_types::Timestamp::from(doc.timestamp)),
+                            timestamp: Some(prost_types::Timestamp {
+                                seconds: doc.timestamp.timestamp(),
+                                nanos: doc.timestamp.timestamp_subsec_nanos() as i32,
+                            }),
                             metadata: doc.metadata,
                         };
 
@@ -286,11 +288,11 @@ impl Database {
             .limit(limit as i64)
             .build();
 
-        let mut cursor = collection.find(filter).with_options(options).await?;
+        let mut cursor = collection.find(filter, options).await?;
         let mut entries = Vec::new();
 
-        while let Some(entry) = cursor.try_next().await? {
-            entries.push(entry);
+        while let Some(entry) = cursor.next().await {
+            entries.push(entry?);
         }
 
         Ok(entries)
@@ -309,7 +311,7 @@ impl Database {
             deletions: 0, // TODO: Calculate from diff
         };
 
-        collection.insert_one(history_entry).await?;
+        collection.insert_one(history_entry, None).await?;
         Ok(())
     }
 }
@@ -322,7 +324,7 @@ pub async fn connect(uri: &str) -> Result<Client, ServiceError> {
     // Ping to verify connection
     client
         .database("admin")
-        .run_command(doc! { "ping": 1 })
+        .run_command(doc! { "ping": 1 }, None)
         .await?;
 
     info!("Successfully connected to MongoDB");

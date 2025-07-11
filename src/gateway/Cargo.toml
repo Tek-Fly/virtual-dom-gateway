@@ -4,6 +4,7 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+build = "build.rs"
 
 [dependencies]
 # Async runtime
@@ -47,6 +48,10 @@ futures = "0.3"
 tower = "0.4"
 hyper = "1.4"
 axum = "0.7"
+rustls-pemfile = "2.0"
+prost-types = "0.13"
+lazy_static = { workspace = true }
+tokio-stream = { workspace = true }
 
 [build-dependencies]
 tonic-build.workspace = true

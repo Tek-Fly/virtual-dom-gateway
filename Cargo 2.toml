@@ -51,9 +51,6 @@ prometheus = "0.13"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bytes = "1.7"
-lazy_static = "1.5"
-tokio-stream = "0.1"
-prost-types = "0.13"
 
 # Testing
 mockall = "0.13"
